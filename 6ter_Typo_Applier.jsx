@@ -139,6 +139,30 @@
         return score;
     }
 
+    function doesAssignedStyleMatch(textDoc, expectedStyleTokens) {
+        if (!expectedStyleTokens || expectedStyleTokens.length === 0) {
+            return true;
+        }
+
+        var assigned = (
+            String(textDoc.font || "") + " " +
+            String(textDoc.fontFamily || "") + " " +
+            String(textDoc.fontStyle || "")
+        ).toLowerCase();
+
+        if (expectedStyleTokens.indexOf("bold") !== -1 && assigned.indexOf("bold") === -1) {
+            return false;
+        }
+        if (expectedStyleTokens.indexOf("black") !== -1 && assigned.indexOf("black") === -1 && assigned.indexOf("heavy") === -1) {
+            return false;
+        }
+        if (expectedStyleTokens.indexOf("medium") !== -1 && assigned.indexOf("medium") === -1) {
+            return false;
+        }
+
+        return true;
+    }
+
     function resolveFont(fontKey) {
         var aliases = getFontAliases(fontKey);
         var aliasNorm = [];
@@ -152,7 +176,7 @@
         var fallbackString = aliases[0];
 
         if (!app.fonts || app.fonts.length === 0) {
-            return { ok: true, requested: fontKey, aliases: aliases, matches: matches, fallbackString: fallbackString };
+            return { ok: true, requested: fontKey, aliases: aliases, matches: matches, fallbackString: fallbackString, expectedStyleTokens: expectedStyleTokens };
         }
 
         var seen = {};
@@ -201,12 +225,13 @@
             });
         }
 
-        return { ok: true, requested: fontKey, aliases: aliases, matches: matches, fallbackString: fallbackString };
+        return { ok: true, requested: fontKey, aliases: aliases, matches: matches, fallbackString: fallbackString, expectedStyleTokens: expectedStyleTokens };
     }
 
     function tryAssignFont(textDoc, resolvedFont) {
         var i;
         var tried = [];
+        var expectedStyleTokens = resolvedFont.expectedStyleTokens || [];
 
         // IMPORTANT: prefer concrete installed matches first (weight/style-aware),
         // then fallback to raw alias strings. This avoids AE resolving family-only
@@ -219,12 +244,15 @@
             try {
                 if (textDoc.fontObject !== undefined && m.fontObj) {
                     textDoc.fontObject = m.fontObj;
-                    return {
-                        ok: true,
-                        used: m.postScriptName || m.name || "fontObject",
-                        mode: "fontObject",
-                        styleName: m.styleName || ""
-                    };
+                    if (doesAssignedStyleMatch(textDoc, expectedStyleTokens)) {
+                        return {
+                            ok: true,
+                            used: m.postScriptName || m.name || "fontObject",
+                            mode: "fontObject",
+                            styleName: m.styleName || ""
+                        };
+                    }
+                    tried.push("fontObject-mismatch:" + (m.postScriptName || m.name || "unknown"));
                 }
             } catch (eObj) {
                 tried.push("fontObject:" + (m.postScriptName || m.name || "unknown"));
@@ -233,7 +261,10 @@
             if (m.postScriptName) {
                 try {
                     textDoc.font = m.postScriptName;
-                    return { ok: true, used: m.postScriptName, mode: "postScriptName", styleName: m.styleName || "" };
+                    if (doesAssignedStyleMatch(textDoc, expectedStyleTokens)) {
+                        return { ok: true, used: m.postScriptName, mode: "postScriptName", styleName: m.styleName || "" };
+                    }
+                    tried.push("postScriptName-mismatch:" + m.postScriptName);
                 } catch (ePs) {
                     tried.push(m.postScriptName);
                 }
@@ -242,7 +273,10 @@
             if (m.name) {
                 try {
                     textDoc.font = m.name;
-                    return { ok: true, used: m.name, mode: "name", styleName: m.styleName || "" };
+                    if (doesAssignedStyleMatch(textDoc, expectedStyleTokens)) {
+                        return { ok: true, used: m.name, mode: "name", styleName: m.styleName || "" };
+                    }
+                    tried.push("name-mismatch:" + m.name);
                 } catch (eName) {
                     tried.push(m.name);
                 }
@@ -253,7 +287,10 @@
         for (i = 0; i < resolvedFont.aliases.length; i++) {
             try {
                 textDoc.font = resolvedFont.aliases[i];
-                return { ok: true, used: resolvedFont.aliases[i], mode: "alias", styleName: "" };
+                if (doesAssignedStyleMatch(textDoc, expectedStyleTokens)) {
+                    return { ok: true, used: resolvedFont.aliases[i], mode: "alias", styleName: "" };
+                }
+                tried.push("alias-mismatch:" + resolvedFont.aliases[i]);
             } catch (eAlias) {
                 tried.push(resolvedFont.aliases[i]);
             }
@@ -262,7 +299,10 @@
         // 3) Last fallback to primary alias.
         try {
             textDoc.font = resolvedFont.fallbackString;
-            return { ok: true, used: resolvedFont.fallbackString, mode: "fallback", styleName: "" };
+            if (doesAssignedStyleMatch(textDoc, expectedStyleTokens)) {
+                return { ok: true, used: resolvedFont.fallbackString, mode: "fallback", styleName: "" };
+            }
+            tried.push("fallback-mismatch:" + resolvedFont.fallbackString);
         } catch (eFallback) {
             tried.push(resolvedFont.fallbackString);
         }
