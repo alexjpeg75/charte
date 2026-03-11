@@ -48,6 +48,39 @@
         return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255];
     }
 
+    function safeToString(value, fallback) {
+        if (fallback === undefined) {
+            fallback = "Erreur inconnue.";
+        }
+        if (value === undefined || value === null) {
+            return fallback;
+        }
+        var str = "";
+        try {
+            if (value.toString) {
+                str = value.toString();
+            } else {
+                str = String(value);
+            }
+        } catch (e) {
+            str = "";
+        }
+        if (!str || str === "undefined" || str === "null") {
+            return fallback;
+        }
+        return str;
+    }
+
+    function safeAlert(message, title) {
+        var msg = safeToString(message, "Une erreur est survenue. Consulte le panneau Statut.");
+        try {
+            alert(msg, title || SCRIPT_NAME);
+        } catch (e) {
+            // Last resort for hosts with strict alert behavior.
+            alert("Une erreur est survenue.", SCRIPT_NAME);
+        }
+    }
+
     function getActiveComp() {
         var item = app.project ? app.project.activeItem : null;
         if (item && item instanceof CompItem) {
@@ -365,13 +398,13 @@
     function applySelectedPreset() {
         var preset = findPresetById(uiState.selectedPresetId);
         if (!preset) {
-            alert("S\u00E9lectionne un preset avant d'appliquer.", SCRIPT_NAME);
+            safeAlert("S\u00E9lectionne un preset avant d'appliquer.", SCRIPT_NAME);
             return;
         }
 
         var sel = getSelectedTextLayers();
         if (!sel.ok) {
-            alert(sel.reason, SCRIPT_NAME);
+            safeAlert(sel.reason, SCRIPT_NAME);
             setStatus(sel.reason, true);
             return;
         }
@@ -394,7 +427,7 @@
             }
         } catch (err) {
             app.endUndoGroup();
-            alert("Erreur pendant l'application du style :\n" + err.toString(), SCRIPT_NAME);
+            safeAlert("Erreur pendant l'application du style :\n" + safeToString(err, "Erreur inconnue."), SCRIPT_NAME);
             setStatus("Erreur : " + err.toString(), true);
             return;
         }
@@ -409,7 +442,7 @@
 
         if (missing.length > 0) {
             var msg = "Style appliqu\u00E9 partiellement. Police(s) manquante(s) :\n- " + missing.join("\n- ");
-            alert(msg, SCRIPT_NAME);
+            safeAlert(msg, SCRIPT_NAME);
             setStatus("Attention : police manquante pour " + preset.label, true);
         } else {
             setStatus("Appliqu\u00E9 : " + preset.label + " sur " + sel.layers.length + " calque(s).", false);
@@ -650,11 +683,15 @@
         return pal;
     }
 
-    var myPal = buildUI(thisObj);
-    if (myPal instanceof Window) {
-        myPal.center();
-        myPal.show();
-    } else {
-        myPal.layout.layout(true);
+    try {
+        var myPal = buildUI(thisObj);
+        if (myPal instanceof Window) {
+            myPal.center();
+            myPal.show();
+        } else {
+            myPal.layout.layout(true);
+        }
+    } catch (bootErr) {
+        safeAlert("Erreur au lancement du panneau :\n" + safeToString(bootErr, "Erreur inconnue."), SCRIPT_NAME);
     }
 })(this);
