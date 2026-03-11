@@ -7,9 +7,25 @@
 (function fontWeightChooser(thisObj) {
     var SCRIPT_NAME = "6ter Font Weight Chooser";
 
+    function safeToString(value, fallback) {
+        var fb = fallback || "Unknown error.";
+        if (value === undefined || value === null) {
+            return fb;
+        }
+        var out = "";
+        try {
+            out = value.toString ? value.toString() : String(value);
+        } catch (e) {
+            out = "";
+        }
+        if (!out || out === "undefined" || out === "null") {
+            return fb;
+        }
+        return out;
+    }
+
     function safeAlert(msg) {
-        var txt = msg ? String(msg) : "Unknown error.";
-        alert(txt, SCRIPT_NAME);
+        alert(safeToString(msg, "Unknown error."), SCRIPT_NAME);
     }
 
     function getActiveComp() {
@@ -42,37 +58,73 @@
         return { ok: true, reason: "", layers: textLayers };
     }
 
+    function normalize(value) {
+        return String(value || "").toLowerCase().replace(/[\s_\-]+/g, "");
+    }
+
+    function hasToken(haystack, token) {
+        return normalize(haystack).indexOf(normalize(token)) !== -1;
+    }
+
     function collectFonts() {
         var out = {
             families: [],
             byFamily: {}
         };
 
-        if (!app.fonts || app.fonts.length === 0) {
+        if (!app.fonts) {
             return out;
         }
 
-        var i;
-        for (i = 0; i < app.fonts.length; i++) {
-            var f = app.fonts[i];
-            var family = String(f.familyName || f.name || "Unknown");
-            var style = String(f.styleName || "Regular");
+        var i, j;
 
-            if (!out.byFamily[family]) {
-                out.byFamily[family] = [];
-                out.families.push(family);
+        // AE 24+ preferred source.
+        if (app.fonts.allFonts && app.fonts.allFonts.length) {
+            for (i = 0; i < app.fonts.allFonts.length; i++) {
+                var familyGroup = app.fonts.allFonts[i];
+                if (!familyGroup || !familyGroup.length) {
+                    continue;
+                }
+
+                var familyName = String(familyGroup[0].familyName || familyGroup[0].name || "Unknown");
+                if (!out.byFamily[familyName]) {
+                    out.byFamily[familyName] = [];
+                    out.families.push(familyName);
+                }
+
+                for (j = 0; j < familyGroup.length; j++) {
+                    var fObj = familyGroup[j];
+                    out.byFamily[familyName].push({
+                        family: familyName,
+                        label: String(fObj.styleName || "Regular"),
+                        styleName: String(fObj.styleName || "Regular"),
+                        postScriptName: String(fObj.postScriptName || ""),
+                        name: String(fObj.name || ""),
+                        fontObj: fObj
+                    });
+                }
             }
-
-            out.byFamily[family].push({
-                label: style,
-                postScriptName: String(f.postScriptName || ""),
-                name: String(f.name || ""),
-                fontObj: f
-            });
+        } else if (app.fonts.length) {
+            // Backward-compatible source.
+            for (i = 0; i < app.fonts.length; i++) {
+                var f = app.fonts[i];
+                var family = String(f.familyName || f.name || "Unknown");
+                if (!out.byFamily[family]) {
+                    out.byFamily[family] = [];
+                    out.families.push(family);
+                }
+                out.byFamily[family].push({
+                    family: family,
+                    label: String(f.styleName || "Regular"),
+                    styleName: String(f.styleName || "Regular"),
+                    postScriptName: String(f.postScriptName || ""),
+                    name: String(f.name || ""),
+                    fontObj: f
+                });
+            }
         }
 
         out.families.sort();
-
         for (i = 0; i < out.families.length; i++) {
             var fam = out.families[i];
             out.byFamily[fam].sort(function (a, b) {
@@ -83,19 +135,52 @@
         return out;
     }
 
-    function applyFamilyStyleToLayer(layer, family, styleEntry) {
+    function getExpectedWeightToken(styleLabel) {
+        var s = String(styleLabel || "").toLowerCase();
+        if (s.indexOf("black") !== -1 || s.indexOf("heavy") !== -1) { return "black"; }
+        if (s.indexOf("bold") !== -1 || s.indexOf("demi") !== -1 || s.indexOf("semi") !== -1) { return "bold"; }
+        if (s.indexOf("medium") !== -1) { return "medium"; }
+        return "regular";
+    }
+
+    function styleMatches(textDoc, styleLabel) {
+        var token = getExpectedWeightToken(styleLabel);
+        var assigned = String(textDoc.fontStyle || "") + " " + String(textDoc.font || "");
+        if (token === "regular") {
+            return true;
+        }
+        if (token === "black") {
+            return hasToken(assigned, "black") || hasToken(assigned, "heavy");
+        }
+        return hasToken(assigned, token);
+    }
+
+    function tryResolveByFamilyStyle(family, styleLabel) {
+        if (!app.fonts || !app.fonts.getFontsByFamilyNameAndStyleName) {
+            return null;
+        }
+        try {
+            var arr = app.fonts.getFontsByFamilyNameAndStyleName(family, styleLabel);
+            if (arr && arr.length > 0) {
+                return arr[0];
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function applyFamilyStyleToLayer(layer, family, styleEntry, allowFauxBold) {
         var sourceText = layer.property("Source Text");
         if (!sourceText) {
             return;
         }
 
         var textDoc = sourceText.value;
-
-        // Prefer explicit style assignment with fontObject when available.
+        var targetFontObj = tryResolveByFamilyStyle(family, styleEntry.styleName) || styleEntry.fontObj;
         var assigned = false;
+
         try {
-            if (textDoc.fontObject !== undefined && styleEntry.fontObj) {
-                textDoc.fontObject = styleEntry.fontObj;
+            if (textDoc.fontObject !== undefined && targetFontObj) {
+                textDoc.fontObject = targetFontObj;
                 assigned = true;
             }
         } catch (eObj) {
@@ -112,12 +197,31 @@
         }
 
         if (!assigned && styleEntry.name) {
-            textDoc.font = styleEntry.name;
-            assigned = true;
+            try {
+                textDoc.font = styleEntry.name;
+                assigned = true;
+            } catch (eName) {
+                assigned = false;
+            }
         }
 
         if (!assigned) {
-            throw new Error("Unable to apply style '" + styleEntry.label + "' for family '" + family + "'.");
+            throw new Error("Unable to assign the requested font style.");
+        }
+
+        // If AE silently falls back to Regular, use fauxBold as final fallback for bold-like styles.
+        if (!styleMatches(textDoc, styleEntry.styleName)) {
+            var weightToken = getExpectedWeightToken(styleEntry.styleName);
+            if (allowFauxBold && (weightToken === "bold" || weightToken === "black") && textDoc.fauxBold !== undefined) {
+                try {
+                    textDoc.fauxBold = true;
+                } catch (eFb) {}
+            }
+        } else if (textDoc.fauxBold !== undefined) {
+            // Keep normal styles clean when real match exists.
+            try {
+                textDoc.fauxBold = false;
+            } catch (eClear) {}
         }
 
         sourceText.setValue(textDoc);
@@ -132,21 +236,24 @@
 
         var fontsData = collectFonts();
 
-        var title = pal.add("statictext", undefined, "Choose family and weight/style");
+        pal.add("statictext", undefined, "Choose family and weight/style");
 
         var famGroup = pal.add("group");
         famGroup.orientation = "row";
         famGroup.alignChildren = ["left", "center"];
         famGroup.add("statictext", undefined, "Family:");
         var familyDropdown = famGroup.add("dropdownlist", undefined, fontsData.families);
-        familyDropdown.preferredSize.width = 260;
+        familyDropdown.preferredSize.width = 270;
 
         var styleGroup = pal.add("group");
         styleGroup.orientation = "row";
         styleGroup.alignChildren = ["left", "center"];
         styleGroup.add("statictext", undefined, "Style:");
         var styleDropdown = styleGroup.add("dropdownlist", undefined, []);
-        styleDropdown.preferredSize.width = 260;
+        styleDropdown.preferredSize.width = 270;
+
+        var fauxBoldChk = pal.add("checkbox", undefined, "Use faux bold fallback if AE keeps Regular");
+        fauxBoldChk.value = true;
 
         var status = pal.add("statictext", undefined, "Ready.", { multiline: true });
         status.preferredSize.height = 36;
@@ -209,12 +316,12 @@
             try {
                 var i;
                 for (i = 0; i < sel.layers.length; i++) {
-                    applyFamilyStyleToLayer(sel.layers[i], fam, styleEntry);
+                    applyFamilyStyleToLayer(sel.layers[i], fam, styleEntry, fauxBoldChk.value);
                 }
             } catch (err) {
                 app.endUndoGroup();
-                safeAlert("Apply error:\n" + String(err));
-                status.text = "Error: " + String(err);
+                safeAlert("Apply error:\n" + safeToString(err, "Unknown error."));
+                status.text = "Error: " + safeToString(err, "Unknown error.");
                 return;
             }
             app.endUndoGroup();
@@ -243,7 +350,7 @@
             familyDropdown.selection = 0;
             refreshStylesForFamily();
         } else {
-            status.text = "No fonts detected via app.fonts.";
+            status.text = "No fonts detected.";
         }
 
         pal.onResizing = pal.onResize = function () {
@@ -262,6 +369,6 @@
             win.layout.layout(true);
         }
     } catch (e) {
-        safeAlert("Startup error:\n" + String(e));
+        safeAlert("Startup error:\n" + safeToString(e, "Unknown error."));
     }
 })(this);
