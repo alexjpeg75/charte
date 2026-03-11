@@ -100,6 +100,43 @@
         return aliases;
     }
 
+    function getExpectedStyleTokens(fontKey, aliases) {
+        var src = (String(fontKey || "") + " " + aliases.join(" ")).toLowerCase();
+        var tokens = [];
+        if (src.indexOf("black") !== -1 || src.indexOf("heavy") !== -1) { tokens.push("black"); }
+        if (src.indexOf("bold") !== -1) { tokens.push("bold"); }
+        if (src.indexOf("medium") !== -1) { tokens.push("medium"); }
+        if (src.indexOf("regular") !== -1 || src.indexOf("roman") !== -1 || src.indexOf("book") !== -1) { tokens.push("regular"); }
+        return tokens;
+    }
+
+    function scoreStyleMatch(fontObj, expectedStyleTokens) {
+        if (!expectedStyleTokens || expectedStyleTokens.length === 0) {
+            return 0;
+        }
+
+        var haystack = (
+            String(fontObj.styleName || "") + " " +
+            String(fontObj.postScriptName || "") + " " +
+            String(fontObj.name || "")
+        ).toLowerCase();
+
+        var score = 0;
+        var i;
+        for (i = 0; i < expectedStyleTokens.length; i++) {
+            if (haystack.indexOf(expectedStyleTokens[i]) !== -1) {
+                score += 20;
+            }
+        }
+
+        // Penalize known wrong weights when a specific one is requested.
+        if (expectedStyleTokens.indexOf("bold") !== -1 && haystack.indexOf("medium") !== -1) { score -= 15; }
+        if (expectedStyleTokens.indexOf("black") !== -1 && haystack.indexOf("medium") !== -1) { score -= 20; }
+        if (expectedStyleTokens.indexOf("medium") !== -1 && haystack.indexOf("bold") !== -1) { score -= 12; }
+
+        return score;
+    }
+
     function resolveFont(fontKey) {
         var aliases = getFontAliases(fontKey);
         var aliasNorm = [];
@@ -108,6 +145,7 @@
             aliasNorm.push(normalizeFontName(aliases[i]));
         }
 
+        var expectedStyleTokens = getExpectedStyleTokens(fontKey, aliases);
         var matches = [];
         var fallbackString = aliases[0];
 
@@ -116,10 +154,10 @@
         }
 
         var seen = {};
-        var f, fields, key, candidate, normCandidate, a, weight;
+        var f, fields, key, candidate, normCandidate, a, weight, styleScore;
         for (i = 0; i < app.fonts.length; i++) {
             f = app.fonts[i];
-            fields = [f.postScriptName, f.name, f.familyName];
+            fields = [f.postScriptName, f.name, f.familyName, f.styleName];
 
             for (var fi = 0; fi < fields.length; fi++) {
                 candidate = fields[fi];
@@ -129,7 +167,7 @@
 
                 for (a = 0; a < aliasNorm.length; a++) {
                     if (normCandidate === aliasNorm[a]) {
-                        weight = 100; // strong exact match
+                        weight = 100;
                         break;
                     }
                     if (normCandidate.indexOf(aliasNorm[a]) !== -1 || aliasNorm[a].indexOf(normCandidate) !== -1) {
@@ -138,10 +176,18 @@
                 }
 
                 if (weight > -1) {
+                    styleScore = scoreStyleMatch(f, expectedStyleTokens);
                     key = String(f.postScriptName || "") + "|" + String(f.name || "") + "|" + String(f.familyName || "") + "|" + String(f.styleName || "");
                     if (!seen[key]) {
                         seen[key] = true;
-                        matches.push({ fontObj: f, weight: weight, postScriptName: f.postScriptName, name: f.name, familyName: f.familyName });
+                        matches.push({
+                            fontObj: f,
+                            weight: weight + styleScore,
+                            postScriptName: f.postScriptName,
+                            name: f.name,
+                            familyName: f.familyName,
+                            styleName: f.styleName
+                        });
                     }
                 }
             }
