@@ -131,7 +131,9 @@
 
         // Penalize known wrong weights when a specific one is requested.
         if (expectedStyleTokens.indexOf("bold") !== -1 && haystack.indexOf("medium") !== -1) { score -= 15; }
+        if (expectedStyleTokens.indexOf("bold") !== -1 && haystack.indexOf("regular") !== -1) { score -= 20; }
         if (expectedStyleTokens.indexOf("black") !== -1 && haystack.indexOf("medium") !== -1) { score -= 20; }
+        if (expectedStyleTokens.indexOf("black") !== -1 && haystack.indexOf("regular") !== -1) { score -= 25; }
         if (expectedStyleTokens.indexOf("medium") !== -1 && haystack.indexOf("bold") !== -1) { score -= 12; }
 
         return score;
@@ -206,56 +208,66 @@
         var i;
         var tried = [];
 
-        // 1) Try exact aliases from FONT_MAP first.
+        // IMPORTANT: prefer concrete installed matches first (weight/style-aware),
+        // then fallback to raw alias strings. This avoids AE resolving family-only
+        // names (ex: Andes) to Regular by default.
+
+        // 1) Best installed matches first: fontObject -> postScriptName -> name.
+        for (i = 0; i < resolvedFont.matches.length; i++) {
+            var m = resolvedFont.matches[i];
+
+            try {
+                if (textDoc.fontObject !== undefined && m.fontObj) {
+                    textDoc.fontObject = m.fontObj;
+                    return {
+                        ok: true,
+                        used: m.postScriptName || m.name || "fontObject",
+                        mode: "fontObject",
+                        styleName: m.styleName || ""
+                    };
+                }
+            } catch (eObj) {
+                tried.push("fontObject:" + (m.postScriptName || m.name || "unknown"));
+            }
+
+            if (m.postScriptName) {
+                try {
+                    textDoc.font = m.postScriptName;
+                    return { ok: true, used: m.postScriptName, mode: "postScriptName", styleName: m.styleName || "" };
+                } catch (ePs) {
+                    tried.push(m.postScriptName);
+                }
+            }
+
+            if (m.name) {
+                try {
+                    textDoc.font = m.name;
+                    return { ok: true, used: m.name, mode: "name", styleName: m.styleName || "" };
+                } catch (eName) {
+                    tried.push(m.name);
+                }
+            }
+        }
+
+        // 2) Fallback aliases from FONT_MAP.
         for (i = 0; i < resolvedFont.aliases.length; i++) {
             try {
                 textDoc.font = resolvedFont.aliases[i];
-                return { ok: true, used: resolvedFont.aliases[i], mode: "alias" };
+                return { ok: true, used: resolvedFont.aliases[i], mode: "alias", styleName: "" };
             } catch (eAlias) {
                 tried.push(resolvedFont.aliases[i]);
             }
         }
 
-        // 2) Try matched installed font names (postScriptName then display name).
-        for (i = 0; i < resolvedFont.matches.length; i++) {
-            var m = resolvedFont.matches[i];
-            if (m.postScriptName) {
-                try {
-                    textDoc.font = m.postScriptName;
-                    return { ok: true, used: m.postScriptName, mode: "postScriptName" };
-                } catch (ePs) {
-                    tried.push(m.postScriptName);
-                }
-            }
-            if (m.name) {
-                try {
-                    textDoc.font = m.name;
-                    return { ok: true, used: m.name, mode: "name" };
-                } catch (eName) {
-                    tried.push(m.name);
-                }
-            }
-
-            // 3) AE 2025/2026: if supported, assign fontObject directly.
-            try {
-                if (textDoc.fontObject !== undefined && m.fontObj) {
-                    textDoc.fontObject = m.fontObj;
-                    return { ok: true, used: m.postScriptName || m.name || "fontObject", mode: "fontObject" };
-                }
-            } catch (eObj) {
-                tried.push("fontObject:" + (m.postScriptName || m.name || "unknown"));
-            }
-        }
-
-        // 4) Last fallback to primary alias.
+        // 3) Last fallback to primary alias.
         try {
             textDoc.font = resolvedFont.fallbackString;
-            return { ok: true, used: resolvedFont.fallbackString, mode: "fallback" };
+            return { ok: true, used: resolvedFont.fallbackString, mode: "fallback", styleName: "" };
         } catch (eFallback) {
             tried.push(resolvedFont.fallbackString);
         }
 
-        return { ok: false, used: "", mode: "none", tried: tried };
+        return { ok: false, used: "", mode: "none", styleName: "", tried: tried };
     }
 
     function applyStyleToLayer(layer, preset) {
