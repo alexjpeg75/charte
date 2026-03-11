@@ -314,12 +314,23 @@
             return;
         }
 
-        var contentH = uiState.listContent.size.height;
-        var viewH = uiState.viewport.size.height;
+        // Some AE versions can briefly expose undefined size/location objects during first layout.
+        // Guard every access so the panel never throws "undefined is not an object".
+        var contentSize = uiState.listContent.size;
+        var viewSize = uiState.viewport.size;
+        if (!contentSize || !viewSize) {
+            uiState.scrollbar.visible = false;
+            return;
+        }
+
+        var contentH = contentSize.height;
+        var viewH = viewSize.height;
 
         if (contentH <= viewH) {
             uiState.scrollbar.visible = false;
-            uiState.listContent.location.y = 0;
+            if (uiState.listContent.location) {
+                uiState.listContent.location.y = 0;
+            }
             return;
         }
 
@@ -329,7 +340,9 @@
         if (uiState.scrollbar.value > uiState.scrollbar.maxvalue) {
             uiState.scrollbar.value = uiState.scrollbar.maxvalue;
         }
-        uiState.listContent.location.y = -uiState.scrollbar.value;
+        if (uiState.listContent.location) {
+            uiState.listContent.location.y = -uiState.scrollbar.value;
+        }
     }
 
     function buildUI(thisObj) {
@@ -384,7 +397,9 @@
         uiState.scrollbar = scrollbar;
 
         scrollbar.onChanging = function () {
-            uiState.listContent.location.y = -this.value;
+            if (uiState.listContent && uiState.listContent.location) {
+                uiState.listContent.location.y = -this.value;
+            }
         };
 
         categoryDropdown.onChange = function () {
