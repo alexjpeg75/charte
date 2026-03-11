@@ -18,20 +18,20 @@
     var STYLE_PRESETS = [
         { id: "rdv_bug_noir", label: "Rendez-vous bug", fontKey: "Andes Bold", fontSize: 27, tracking: -20, leading: null, fillColor: [0, 0, 0], category: "Bug", sample: "Rendez-vous" },
         { id: "nom_programme_bemio", label: "Nom programme Bemio", fontKey: "Bemio Regular", fontSize: 37, tracking: -20, leading: 28, fillColor: [255, 255, 255], category: "Bug", sample: "Nom du programme" },
-        { id: "typo_deroulante", label: "Typo déroulante", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: 32, fillColor: [255, 255, 255], category: "Déroulant", sample: "Texte déroulant" },
-        { id: "a_suivre_blanc", label: "À suivre", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: null, fillColor: [255, 255, 255], category: "A suivre", sample: "À suivre" },
+        { id: "typo_deroulante", label: "Typo d\u00E9roulante", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: 32, fillColor: [255, 255, 255], category: "D\u00E9roulant", sample: "Texte d\u00E9roulant" },
+        { id: "a_suivre_blanc", label: "\u00C0 suivre", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: null, fillColor: [255, 255, 255], category: "A suivre", sample: "\u00C0 suivre" },
         { id: "nom_programme_jaune", label: "Nom programme jaune", fontKey: "Andes Black", fontSize: 30, tracking: 15, leading: 30, fillColor: [253, 237, 136], category: "Programme", sample: "Nom programme" },
-        { id: "phrase_editoriale", label: "Phrase éditoriale", fontKey: "Andes Medium", fontSize: 30, tracking: 0, leading: 30, fillColor: [255, 255, 255], category: "Édito", sample: "Phrase éditoriale" },
-        { id: "rdv_jaune", label: "Rendez-vous jaune", fontKey: "Andes Medium", fontSize: 30, tracking: 0, leading: 30, fillColor: [253, 237, 136], category: "Édito", sample: "Rendez-vous" },
+        { id: "phrase_editoriale", label: "Phrase \u00E9ditoriale", fontKey: "Andes Medium", fontSize: 30, tracking: 0, leading: 30, fillColor: [255, 255, 255], category: "\u00C9dito", sample: "Phrase \u00E9ditoriale" },
+        { id: "rdv_jaune", label: "Rendez-vous jaune", fontKey: "Andes Medium", fontSize: 30, tracking: 0, leading: 30, fillColor: [253, 237, 136], category: "\u00C9dito", sample: "Rendez-vous" },
         { id: "on_regarde", label: "On regarde", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: null, fillColor: [255, 255, 255], category: "Programme", sample: "On regarde" },
-        { id: "hashtag", label: "Hashtag", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: 30, fillColor: [255, 255, 255], category: "Déroulant", sample: "#Hashtag" },
-        { id: "bandeau_deroulant", label: "Bandeau déroulant", fontKey: "Andes Medium", fontSize: 25.6, tracking: -10, leading: 32, fillColor: [255, 255, 255], category: "Déroulant", sample: "Bandeau déroulant" },
+        { id: "hashtag", label: "Hashtag", fontKey: "Andes Medium", fontSize: 30, tracking: -10, leading: 30, fillColor: [255, 255, 255], category: "D\u00E9roulant", sample: "#Hashtag" },
+        { id: "bandeau_deroulant", label: "Bandeau d\u00E9roulant", fontKey: "Andes Medium", fontSize: 25.6, tracking: -10, leading: 32, fillColor: [255, 255, 255], category: "D\u00E9roulant", sample: "Bandeau d\u00E9roulant" },
         { id: "dans_un_instant", label: "Dans un instant", fontKey: "Andes Medium", fontSize: 40, tracking: -10, leading: 30, fillColor: [254, 238, 137], category: "Fin", sample: "Dans un instant" },
         { id: "nom_programme_fin", label: "Nom programme fin", fontKey: "Bemio Regular", fontSize: 43, tracking: -20, leading: 40, fillColor: [255, 255, 255], category: "Fin", sample: "Nom programme" },
-        { id: "texte_editorialisable", label: "Texte éditorialisable", fontKey: "Andes Medium", fontSize: 42.4, tracking: -10, leading: 45, fillColor: [255, 255, 255], category: "Fin", sample: "Texte éditorialisable" }
+        { id: "texte_editorialisable", label: "Texte \u00E9ditorialisable", fontKey: "Andes Medium", fontSize: 42.4, tracking: -10, leading: 45, fillColor: [255, 255, 255], category: "Fin", sample: "Texte \u00E9ditorialisable" }
     ];
 
-    var CATEGORIES = ["Tous", "Bug", "A suivre", "Programme", "Édito", "Déroulant", "Fin"];
+    var CATEGORIES = ["Tous", "Bug", "A suivre", "Programme", "\u00C9dito", "D\u00E9roulant", "Fin"];
 
     var uiState = {
         selectedPresetId: null,
@@ -58,7 +58,7 @@
     function getSelectedTextLayers() {
         var comp = getActiveComp();
         if (!comp) {
-            return { ok: false, reason: "Aucune composition active. Ouvre une comp puis réessaie.", layers: [] };
+            return { ok: false, reason: "Aucune composition active. Ouvre une comp puis r\u00E9essaie.", layers: [] };
         }
 
         var layers = comp.selectedLayers;
@@ -71,7 +71,7 @@
         }
 
         if (textLayers.length === 0) {
-            return { ok: false, reason: "Aucun calque texte sélectionné. Sélectionne au moins un calque texte.", layers: [] };
+            return { ok: false, reason: "Aucun calque texte s\u00E9lectionn\u00E9. S\u00E9lectionne au moins un calque texte.", layers: [] };
         }
 
         return { ok: true, reason: "", layers: textLayers };
@@ -113,7 +113,7 @@
         var textDoc = sourceTextProp.value;
         var fontResult = resolveFont(preset.fontKey);
         if (!fontResult.ok) {
-            throw new Error("Police introuvable : " + preset.fontKey + " (mappée vers \"" + fontResult.fontName + "\").");
+            throw new Error("Police introuvable : " + preset.fontKey + " (mapp\u00E9e vers \"" + fontResult.fontName + "\").");
         }
 
         textDoc.font = fontResult.fontName;
@@ -142,7 +142,7 @@
 
     function formatPresetLine(preset) {
         var leadingPart = (preset.leading !== null && preset.leading !== undefined) ? (" / leading " + preset.leading) : "";
-        return preset.fontKey + " • " + preset.fontSize + " pt • tracking " + preset.tracking + leadingPart;
+        return preset.fontKey + " \u2022 " + preset.fontSize + " pt \u2022 tracking " + preset.tracking + leadingPart;
     }
 
     function setStatus(message, isError) {
@@ -159,7 +159,7 @@
     function applySelectedPreset() {
         var preset = findPresetById(uiState.selectedPresetId);
         if (!preset) {
-            alert("Sélectionne un preset avant d'appliquer.", SCRIPT_NAME);
+            alert("S\u00E9lectionne un preset avant d'appliquer.", SCRIPT_NAME);
             return;
         }
 
@@ -202,11 +202,11 @@
         }
 
         if (missing.length > 0) {
-            var msg = "Style appliqué partiellement. Police(s) manquante(s) :\n- " + missing.join("\n- ");
+            var msg = "Style appliqu\u00E9 partiellement. Police(s) manquante(s) :\n- " + missing.join("\n- ");
             alert(msg, SCRIPT_NAME);
             setStatus("Attention : police manquante pour " + preset.label, true);
         } else {
-            setStatus("Appliqué : " + preset.label + " sur " + sel.layers.length + " calque(s).", false);
+            setStatus("Appliqu\u00E9 : " + preset.label + " sur " + sel.layers.length + " calque(s).", false);
         }
     }
 
@@ -232,7 +232,7 @@
         function clickHandler() {
             uiState.selectedPresetId = preset.id;
             refreshCardSelectionStyles();
-            setStatus("Preset sélectionné : " + preset.label + " (application immédiate)", false);
+            setStatus("Preset s\u00E9lectionn\u00E9 : " + preset.label + " (application imm\u00E9diate)", false);
             applySelectedPreset();
         }
 
@@ -360,14 +360,14 @@
         var title = header.add("statictext", undefined, SCRIPT_NAME);
         title.graphics.font = ScriptUI.newFont("Arial", "Bold", 18);
 
-        var subtitle = header.add("statictext", undefined, "Styles de charte 6ter — application rapide");
+        var subtitle = header.add("statictext", undefined, "Styles de charte 6ter \u2014 application rapide");
         subtitle.graphics.foregroundColor = subtitle.graphics.newPen(subtitle.graphics.PenType.SOLID_COLOR, [0.70, 0.74, 0.82, 1], 1);
 
         var filterRow = pal.add("group");
         filterRow.orientation = "row";
         filterRow.alignChildren = ["left", "center"];
 
-        filterRow.add("statictext", undefined, "Catégorie :");
+        filterRow.add("statictext", undefined, "Cat\u00E9gorie :");
         var categoryDropdown = filterRow.add("dropdownlist", undefined, CATEGORIES);
         categoryDropdown.selection = 0;
         categoryDropdown.preferredSize.width = 160;
@@ -411,8 +411,8 @@
         actions.orientation = "row";
         actions.alignChildren = ["fill", "center"];
 
-        var applyBtn = actions.add("button", undefined, "Appliquer au(x) calque(s) sélectionné(s)");
-        var refreshBtn = actions.add("button", undefined, "Rafraîchir sélection");
+        var applyBtn = actions.add("button", undefined, "Appliquer au(x) calque(s) s\u00E9lectionn\u00E9(s)");
+        var refreshBtn = actions.add("button", undefined, "Rafra\u00EEchir s\u00E9lection");
 
         applyBtn.onClick = function () {
             applySelectedPreset();
@@ -420,13 +420,13 @@
 
         refreshBtn.onClick = function () {
             buildCards();
-            setStatus("Sélection visuelle rafraîchie.", false);
+            setStatus("S\u00E9lection visuelle rafra\u00EEchie.", false);
         };
 
         var statusPanel = pal.add("panel", undefined, "Statut");
         statusPanel.alignChildren = ["fill", "top"];
         statusPanel.margins = [10, 16, 10, 10];
-        var statusText = statusPanel.add("statictext", undefined, "Prêt. Choisis un preset puis clique une carte.", { multiline: true });
+        var statusText = statusPanel.add("statictext", undefined, "Pr\u00EAt. Choisis un preset puis clique une carte.", { multiline: true });
         statusText.preferredSize.height = 34;
         uiState.statusText = statusText;
 
@@ -436,7 +436,7 @@
         };
 
         buildCards();
-        setStatus("Prêt. Sélectionne un ou plusieurs calques texte puis clique un preset.", false);
+        setStatus("Pr\u00EAt. S\u00E9lectionne un ou plusieurs calques texte puis clique un preset.", false);
 
         return pal;
     }
