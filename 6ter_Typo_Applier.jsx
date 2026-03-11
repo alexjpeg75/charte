@@ -224,7 +224,10 @@
     function refreshCardSelectionStyles() {
         var i;
         for (i = 0; i < uiState.cardRows.length; i++) {
-            uiState.cardRows[i].notify("onDraw");
+            var card = uiState.cardRows[i];
+            var isSelected = (card.presetId === uiState.selectedPresetId);
+            card.text = isSelected ? "Preset selectionne" : "";
+            card.enabled = true;
         }
     }
 
@@ -259,54 +262,54 @@
         var i;
         for (i = 0; i < presets.length; i++) {
             var preset = presets[i];
-            var card = uiState.listContent.add("group");
+
+            var card = uiState.listContent.add("panel", undefined, "");
             card.orientation = "column";
             card.alignChildren = ["fill", "top"];
-            card.margins = [12, 10, 12, 10];
-            card.spacing = 5;
-            card.preferredSize.height = 92;
+            card.margins = [10, 10, 10, 10];
+            card.spacing = 4;
+            card.preferredSize.height = 100;
             card.presetId = preset.id;
-
-            card.onDraw = function () {
-                var selected = (this.presetId === uiState.selectedPresetId);
-                var bg = selected ? [0.20, 0.25, 0.34, 1] : [0.13, 0.15, 0.19, 1];
-                var border = selected ? [0.98, 0.92, 0.54, 1] : [0.24, 0.27, 0.33, 1];
-                this.graphics.rectPath(0, 0, this.size.width, this.size.height);
-                this.graphics.fillPath(this.graphics.newBrush(this.graphics.BrushType.SOLID_COLOR, bg));
-                this.graphics.rectPath(0.5, 0.5, this.size.width - 1, this.size.height - 1);
-                this.graphics.strokePath(this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, border, selected ? 2 : 1));
-            };
 
             var top = card.add("group");
             top.orientation = "row";
             top.alignChildren = ["left", "center"];
+            top.spacing = 8;
 
             var title = top.add("statictext", undefined, preset.label);
-            title.graphics.foregroundColor = title.graphics.newPen(title.graphics.PenType.SOLID_COLOR, [0.96, 0.97, 1.0, 1], 1);
-            title.characters = 26;
+            title.characters = 28;
 
             var swatch = top.add("panel", undefined, "");
-            swatch.preferredSize = [22, 14];
-            swatch.rgb = rgb255ToAE(preset.fillColor);
-            swatch.onDraw = function () {
-                this.graphics.rectPath(0, 0, this.size.width, this.size.height);
-                this.graphics.fillPath(this.graphics.newBrush(this.graphics.BrushType.SOLID_COLOR, [this.rgb[0], this.rgb[1], this.rgb[2], 1]));
-                this.graphics.rectPath(0.5, 0.5, this.size.width - 1, this.size.height - 1);
-                this.graphics.strokePath(this.graphics.newPen(this.graphics.PenType.SOLID_COLOR, [0, 0, 0, 0.6], 1));
-            };
+            swatch.preferredSize = [20, 12];
+            swatch.helpTip = "RGB " + preset.fillColor[0] + "," + preset.fillColor[1] + "," + preset.fillColor[2];
 
             var meta = card.add("statictext", undefined, formatPresetLine(preset));
-            meta.graphics.foregroundColor = meta.graphics.newPen(meta.graphics.PenType.SOLID_COLOR, [0.72, 0.78, 0.88, 1], 1);
-
             var sample = card.add("statictext", undefined, "Exemple : " + preset.sample);
-            sample.graphics.foregroundColor = sample.graphics.newPen(sample.graphics.PenType.SOLID_COLOR, [0.86, 0.89, 0.95, 1], 1);
 
-            attachClickHandlers(card, preset);
+            var applyBtn = card.add("button", undefined, "Appliquer ce preset");
+
+            (function (presetRef, cardRef) {
+                function chooseAndApply() {
+                    uiState.selectedPresetId = presetRef.id;
+                    refreshCardSelectionStyles();
+                    setStatus("Preset selectionne : " + presetRef.label + " (application immediate)", false);
+                    applySelectedPreset();
+                }
+                applyBtn.onClick = chooseAndApply;
+                if (cardRef.addEventListener) { cardRef.addEventListener("click", chooseAndApply); }
+                if (top.addEventListener) { top.addEventListener("click", chooseAndApply); }
+                if (title.addEventListener) { title.addEventListener("click", chooseAndApply); }
+                if (meta.addEventListener) { meta.addEventListener("click", chooseAndApply); }
+                if (sample.addEventListener) { sample.addEventListener("click", chooseAndApply); }
+                if (swatch.addEventListener) { swatch.addEventListener("click", chooseAndApply); }
+            })(preset, card);
+
             uiState.cardRows.push(card);
         }
 
         uiState.listContent.layout.layout(true);
         updateScrollbar();
+        refreshCardSelectionStyles();
     }
 
     function updateScrollbar() {
