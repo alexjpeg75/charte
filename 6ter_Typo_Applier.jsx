@@ -82,7 +82,7 @@
         return String(name || "").toLowerCase().replace(/[\s_\-]+/g, "");
     }
 
-    function resolveFont(fontKey) {
+    function getFontAliases(fontKey) {
         var rawMap = FONT_MAP[fontKey];
         var aliases = [];
         var i;
@@ -97,51 +97,119 @@
             aliases.push(String(fontKey));
         }
 
-        var requested = aliases[0];
+        return aliases;
+    }
 
-        if (!app.fonts || app.fonts.length === 0) {
-            return { ok: true, requested: fontKey, fontName: requested, fallback: false };
-        }
-
-        var preferredFields = ["postScriptName", "name", "familyName"];
+    function resolveFont(fontKey) {
+        var aliases = getFontAliases(fontKey);
         var aliasNorm = [];
+        var i;
         for (i = 0; i < aliases.length; i++) {
             aliasNorm.push(normalizeFontName(aliases[i]));
         }
 
-        var f, field, candidate, normCandidate, a;
-        // Pass 1: exact normalized match.
+        var matches = [];
+        var fallbackString = aliases[0];
+
+        if (!app.fonts || app.fonts.length === 0) {
+            return { ok: true, requested: fontKey, aliases: aliases, matches: matches, fallbackString: fallbackString };
+        }
+
+        var seen = {};
+        var f, fields, key, candidate, normCandidate, a, weight;
         for (i = 0; i < app.fonts.length; i++) {
             f = app.fonts[i];
-            for (field = 0; field < preferredFields.length; field++) {
-                candidate = f[preferredFields[field]];
+            fields = [f.postScriptName, f.name, f.familyName];
+
+            for (var fi = 0; fi < fields.length; fi++) {
+                candidate = fields[fi];
                 if (!candidate) { continue; }
                 normCandidate = normalizeFontName(candidate);
+                weight = -1;
+
                 for (a = 0; a < aliasNorm.length; a++) {
                     if (normCandidate === aliasNorm[a]) {
-                        return { ok: true, requested: fontKey, fontName: String(candidate), fallback: false };
+                        weight = 100; // strong exact match
+                        break;
                     }
-                }
-            }
-        }
-
-        // Pass 2: contains-token fallback (helps when AE exposes style variants).
-        for (i = 0; i < app.fonts.length; i++) {
-            f = app.fonts[i];
-            for (field = 0; field < preferredFields.length; field++) {
-                candidate = f[preferredFields[field]];
-                if (!candidate) { continue; }
-                normCandidate = normalizeFontName(candidate);
-                for (a = 0; a < aliasNorm.length; a++) {
                     if (normCandidate.indexOf(aliasNorm[a]) !== -1 || aliasNorm[a].indexOf(normCandidate) !== -1) {
-                        return { ok: true, requested: fontKey, fontName: String(candidate), fallback: true };
+                        if (weight < 60) { weight = 60; }
+                    }
+                }
+
+                if (weight > -1) {
+                    key = String(f.postScriptName || "") + "|" + String(f.name || "") + "|" + String(f.familyName || "") + "|" + String(f.styleName || "");
+                    if (!seen[key]) {
+                        seen[key] = true;
+                        matches.push({ fontObj: f, weight: weight, postScriptName: f.postScriptName, name: f.name, familyName: f.familyName });
                     }
                 }
             }
         }
 
-        // Last resort: return first alias; let AE attempt assignment.
-        return { ok: true, requested: fontKey, fontName: requested, fallback: true };
+        if (matches.length > 1) {
+            matches.sort(function (a, b) {
+                return b.weight - a.weight;
+            });
+        }
+
+        return { ok: true, requested: fontKey, aliases: aliases, matches: matches, fallbackString: fallbackString };
+    }
+
+    function tryAssignFont(textDoc, resolvedFont) {
+        var i;
+        var tried = [];
+
+        // 1) Try exact aliases from FONT_MAP first.
+        for (i = 0; i < resolvedFont.aliases.length; i++) {
+            try {
+                textDoc.font = resolvedFont.aliases[i];
+                return { ok: true, used: resolvedFont.aliases[i], mode: "alias" };
+            } catch (eAlias) {
+                tried.push(resolvedFont.aliases[i]);
+            }
+        }
+
+        // 2) Try matched installed font names (postScriptName then display name).
+        for (i = 0; i < resolvedFont.matches.length; i++) {
+            var m = resolvedFont.matches[i];
+            if (m.postScriptName) {
+                try {
+                    textDoc.font = m.postScriptName;
+                    return { ok: true, used: m.postScriptName, mode: "postScriptName" };
+                } catch (ePs) {
+                    tried.push(m.postScriptName);
+                }
+            }
+            if (m.name) {
+                try {
+                    textDoc.font = m.name;
+                    return { ok: true, used: m.name, mode: "name" };
+                } catch (eName) {
+                    tried.push(m.name);
+                }
+            }
+
+            // 3) AE 2025/2026: if supported, assign fontObject directly.
+            try {
+                if (textDoc.fontObject !== undefined && m.fontObj) {
+                    textDoc.fontObject = m.fontObj;
+                    return { ok: true, used: m.postScriptName || m.name || "fontObject", mode: "fontObject" };
+                }
+            } catch (eObj) {
+                tried.push("fontObject:" + (m.postScriptName || m.name || "unknown"));
+            }
+        }
+
+        // 4) Last fallback to primary alias.
+        try {
+            textDoc.font = resolvedFont.fallbackString;
+            return { ok: true, used: resolvedFont.fallbackString, mode: "fallback" };
+        } catch (eFallback) {
+            tried.push(resolvedFont.fallbackString);
+        }
+
+        return { ok: false, used: "", mode: "none", tried: tried };
     }
 
     function applyStyleToLayer(layer, preset) {
@@ -152,12 +220,11 @@
 
         var textDoc = sourceTextProp.value;
         var fontResult = resolveFont(preset.fontKey);
-
-        try {
-            textDoc.font = fontResult.fontName;
-        } catch (fontErr) {
-            throw new Error("Police introuvable : " + preset.fontKey + " (essayee : \"" + fontResult.fontName + "\").");
+        var assignment = tryAssignFont(textDoc, fontResult);
+        if (!assignment.ok) {
+            throw new Error("Police introuvable : " + preset.fontKey + " (tests: " + assignment.tried.join(", ") + ").");
         }
+
         textDoc.fontSize = preset.fontSize;
         textDoc.tracking = preset.tracking;
         textDoc.applyFill = true;
