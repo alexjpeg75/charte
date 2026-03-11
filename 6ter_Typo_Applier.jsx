@@ -6,13 +6,14 @@
 (function sixterTypoApplier(thisObj) {
     var SCRIPT_NAME = "6ter Typo Applier";
 
-    // Map logical font keys to exact font names expected by After Effects on your machine.
-    // If styles fail to apply, update the values below (often PostScript names are required).
+    // Map logical font keys to one or more candidate names expected by After Effects.
+    // You can provide a string or an array of aliases (family/style/PostScript variants).
+    // If AE uses different names on your machine, edit these values.
     var FONT_MAP = {
-        "Andes Medium": "Andes Medium",
-        "Andes Black": "Andes Black",
-        "Andes Bold": "Andes Bold",
-        "Bemio Regular": "Bemio Regular"
+        "Andes Medium": ["Andes Medium", "Andes-Medium", "Andes Medium Regular"],
+        "Andes Black": ["Andes Black", "Andes-Black"],
+        "Andes Bold": ["Andes Bold", "Andes-Bold"],
+        "Bemio Regular": ["Bemio Regular", "Bemio-Regular", "Bemio"]
     };
 
     var STYLE_PRESETS = [
@@ -77,31 +78,70 @@
         return { ok: true, reason: "", layers: textLayers };
     }
 
-    function resolveFont(fontKey) {
-        var mappedName = FONT_MAP[fontKey] || fontKey;
-        var normalized = mappedName.toLowerCase();
+    function normalizeFontName(name) {
+        return String(name || "").toLowerCase().replace(/[\s_\-]+/g, "");
+    }
 
-        if (!app.fonts || app.fonts.length === 0) {
-            return { ok: true, requested: fontKey, fontName: mappedName };
+    function resolveFont(fontKey) {
+        var rawMap = FONT_MAP[fontKey];
+        var aliases = [];
+        var i;
+
+        if (rawMap instanceof Array) {
+            for (i = 0; i < rawMap.length; i++) {
+                aliases.push(String(rawMap[i]));
+            }
+        } else if (rawMap !== undefined && rawMap !== null) {
+            aliases.push(String(rawMap));
+        } else {
+            aliases.push(String(fontKey));
         }
 
-        var i;
+        var requested = aliases[0];
+
+        if (!app.fonts || app.fonts.length === 0) {
+            return { ok: true, requested: fontKey, fontName: requested, fallback: false };
+        }
+
+        var preferredFields = ["postScriptName", "name", "familyName"];
+        var aliasNorm = [];
+        for (i = 0; i < aliases.length; i++) {
+            aliasNorm.push(normalizeFontName(aliases[i]));
+        }
+
+        var f, field, candidate, normCandidate, a;
+        // Pass 1: exact normalized match.
         for (i = 0; i < app.fonts.length; i++) {
-            var f = app.fonts[i];
-            var candidates = [];
-            if (f.name) { candidates.push(f.name); }
-            if (f.postScriptName) { candidates.push(f.postScriptName); }
-            if (f.familyName) { candidates.push(f.familyName); }
-            if (f.styleName) { candidates.push(f.styleName); }
-            var j;
-            for (j = 0; j < candidates.length; j++) {
-                if (String(candidates[j]).toLowerCase() === normalized) {
-                    return { ok: true, requested: fontKey, fontName: mappedName };
+            f = app.fonts[i];
+            for (field = 0; field < preferredFields.length; field++) {
+                candidate = f[preferredFields[field]];
+                if (!candidate) { continue; }
+                normCandidate = normalizeFontName(candidate);
+                for (a = 0; a < aliasNorm.length; a++) {
+                    if (normCandidate === aliasNorm[a]) {
+                        return { ok: true, requested: fontKey, fontName: String(candidate), fallback: false };
+                    }
                 }
             }
         }
 
-        return { ok: false, requested: fontKey, fontName: mappedName };
+        // Pass 2: contains-token fallback (helps when AE exposes style variants).
+        for (i = 0; i < app.fonts.length; i++) {
+            f = app.fonts[i];
+            for (field = 0; field < preferredFields.length; field++) {
+                candidate = f[preferredFields[field]];
+                if (!candidate) { continue; }
+                normCandidate = normalizeFontName(candidate);
+                for (a = 0; a < aliasNorm.length; a++) {
+                    if (normCandidate.indexOf(aliasNorm[a]) !== -1 || aliasNorm[a].indexOf(normCandidate) !== -1) {
+                        return { ok: true, requested: fontKey, fontName: String(candidate), fallback: true };
+                    }
+                }
+            }
+        }
+
+        // Last resort: return first alias; let AE attempt assignment.
+        return { ok: true, requested: fontKey, fontName: requested, fallback: true };
     }
 
     function applyStyleToLayer(layer, preset) {
@@ -112,11 +152,12 @@
 
         var textDoc = sourceTextProp.value;
         var fontResult = resolveFont(preset.fontKey);
-        if (!fontResult.ok) {
-            throw new Error("Police introuvable : " + preset.fontKey + " (mapp\u00E9e vers \"" + fontResult.fontName + "\").");
-        }
 
-        textDoc.font = fontResult.fontName;
+        try {
+            textDoc.font = fontResult.fontName;
+        } catch (fontErr) {
+            throw new Error("Police introuvable : " + preset.fontKey + " (essayee : \"" + fontResult.fontName + "\").");
+        }
         textDoc.fontSize = preset.fontSize;
         textDoc.tracking = preset.tracking;
         textDoc.applyFill = true;
